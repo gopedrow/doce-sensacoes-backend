@@ -27,12 +27,42 @@ function processPrivateKey(privateKey) {
   return processedKey;
 }
 
-// Configuração da autenticação Google
-const auth = new google.auth.GoogleAuth({
-  credentials: {
-    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+// Função para carregar credenciais
+function loadCredentials() {
+  // Primeiro, tenta carregar do arquivo JSON (desenvolvimento local)
+  try {
+    if (require('fs').existsSync('./google-credentials.json')) {
+      const credentials = require('fs').readFileSync('./google-credentials.json', 'utf8');
+      return JSON.parse(credentials);
+    }
+  } catch (error) {
+    console.log('📝 Arquivo google-credentials.json não encontrado, usando variáveis de ambiente');
+  }
+  
+  // Se não encontrar arquivo, usa variáveis de ambiente (produção)
+  if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
+    throw new Error('Credenciais não encontradas. Configure GOOGLE_SERVICE_ACCOUNT_EMAIL e GOOGLE_PRIVATE_KEY');
+  }
+  
+  return {
+    type: 'service_account',
+    project_id: 'doce-sensacoes-backend',
+    private_key_id: '1d3699a668c58cc12ddb24842f774ed63cb0230a',
     private_key: processPrivateKey(process.env.GOOGLE_PRIVATE_KEY),
-  },
+    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    client_id: '103598523462427861445',
+    auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+    token_uri: 'https://oauth2.googleapis.com/token',
+    auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+    client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL)}`,
+    universe_domain: 'googleapis.com'
+  };
+}
+
+// Configuração da autenticação Google
+const credentials = loadCredentials();
+const auth = new google.auth.GoogleAuth({
+  credentials: credentials,
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
@@ -69,15 +99,9 @@ const HEADERS = {
 // Função para testar conexão
 async function testConnection() {
   try {
-    // Verificar se as variáveis de ambiente estão definidas
-    if (!process.env.GOOGLE_SHEETS_ID) {
+    // Verificar se o ID da planilha está definido
+    if (!SPREADSHEET_ID) {
       throw new Error('GOOGLE_SHEETS_ID não está definida');
-    }
-    if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) {
-      throw new Error('GOOGLE_SERVICE_ACCOUNT_EMAIL não está definida');
-    }
-    if (!process.env.GOOGLE_PRIVATE_KEY) {
-      throw new Error('GOOGLE_PRIVATE_KEY não está definida');
     }
 
     const response = await sheets.spreadsheets.get({
