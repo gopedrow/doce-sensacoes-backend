@@ -1,11 +1,37 @@
 const { google } = require('googleapis');
 require('dotenv').config();
 
+// Função para processar a chave privada corretamente
+function processPrivateKey(privateKey) {
+  if (!privateKey) {
+    throw new Error('GOOGLE_PRIVATE_KEY não está definida');
+  }
+
+  // Remove aspas extras se existirem
+  let processedKey = privateKey.replace(/^["']|["']$/g, '');
+  
+  // Se a chave já contém quebras de linha reais, não precisa processar
+  if (processedKey.includes('\n')) {
+    return processedKey;
+  }
+  
+  // Substitui \\n por quebras de linha reais
+  processedKey = processedKey.replace(/\\n/g, '\n');
+  
+  // Verifica se a chave tem o formato correto
+  if (!processedKey.includes('-----BEGIN PRIVATE KEY-----') || 
+      !processedKey.includes('-----END PRIVATE KEY-----')) {
+    throw new Error('Formato da chave privada inválido');
+  }
+  
+  return processedKey;
+}
+
 // Configuração da autenticação Google
 const auth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    private_key: processPrivateKey(process.env.GOOGLE_PRIVATE_KEY),
   },
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
@@ -43,6 +69,17 @@ const HEADERS = {
 // Função para testar conexão
 async function testConnection() {
   try {
+    // Verificar se as variáveis de ambiente estão definidas
+    if (!process.env.GOOGLE_SHEETS_ID) {
+      throw new Error('GOOGLE_SHEETS_ID não está definida');
+    }
+    if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) {
+      throw new Error('GOOGLE_SERVICE_ACCOUNT_EMAIL não está definida');
+    }
+    if (!process.env.GOOGLE_PRIVATE_KEY) {
+      throw new Error('GOOGLE_PRIVATE_KEY não está definida');
+    }
+
     const response = await sheets.spreadsheets.get({
       spreadsheetId: SPREADSHEET_ID,
     });
@@ -54,6 +91,23 @@ async function testConnection() {
     return true;
   } catch (error) {
     console.error('❌ Erro ao conectar com Google Sheets:', error.message);
+    
+    // Logs adicionais para debug
+    if (error.message.includes('DECODER routines')) {
+      console.error('💡 Dica: Verifique se a GOOGLE_PRIVATE_KEY está no formato correto');
+      console.error('   - Deve começar com "-----BEGIN PRIVATE KEY-----"');
+      console.error('   - Deve terminar com "-----END PRIVATE KEY-----"');
+      console.error('   - As quebras de linha devem estar como \\n');
+    }
+    
+    if (error.message.includes('invalid_grant') || error.message.includes('unauthorized')) {
+      console.error('💡 Dica: Verifique se o email da Service Account tem acesso à planilha');
+    }
+    
+    if (error.message.includes('notFound')) {
+      console.error('💡 Dica: Verifique se o GOOGLE_SHEETS_ID está correto');
+    }
+    
     return false;
   }
 }
